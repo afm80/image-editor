@@ -1,41 +1,27 @@
-import 'package:bot_toast/bot_toast.dart';
-import 'package:example/shared/widgets/not_found_example.dart';
-import 'package:flutter/gestures.dart';
-import 'package:flutter/services.dart';
+import 'dart:io';
+import 'dart:typed_data';
+
+import 'package:gal/gal.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:media_kit/media_kit.dart';
 import 'package:pro_image_editor/pro_image_editor.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:url_launcher/url_launcher.dart';
 
-import 'core/constants/example_constants.dart';
-import 'core/constants/example_list_constant.dart';
+import 'arabic_i18n.dart';
 
-void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
-
-  // Necessary initialization for package:media_kit.
-  MediaKit.ensureInitialized();
-
-  await Supabase.initialize(
-    url: 'SUPABASE_URL',
-    publishableKey: 'SUPABASE_ANON_KEY',
-    debug: false,
-  );
-
+void main() {
   runApp(const MyApp());
 }
 
-/// The root widget of the application.
+/// Root widget of the Image Editor app.
 class MyApp extends StatelessWidget {
   /// Creates a new [MyApp] widget.
   const MyApp({super.key});
 
-  // This widget is the root of your application.
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Pro-Image-Editor',
+      title: 'Image Editor',
+      debugShowCheckedModeBanner: false,
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(
           seedColor: Colors.blue.shade800,
@@ -43,273 +29,141 @@ class MyApp extends StatelessWidget {
         ),
         useMaterial3: true,
       ),
-      builder: BotToastInit(),
-      navigatorObservers: [BotToastNavigatorObserver()],
-      debugShowCheckedModeBanner: false,
-      onGenerateRoute: (settings) {
-        int index = kImageEditorExamples
-            .indexWhere((example) => example.path == settings.name);
-
-        if (index < 0) {
-          return MaterialPageRoute(
-            builder: (_) => const NotFoundExample(),
-          );
-        }
-
-        return MaterialPageRoute(
-          builder: (_) => kImageEditorExamples[index].page,
-        );
-      },
-      home: const MyHomePage(),
+      home: const HomePage(),
     );
   }
 }
 
-/// The home page of the application.
-class MyHomePage extends StatefulWidget {
-  /// Creates a new [MyHomePage] widget.
-  const MyHomePage({super.key});
+/// Home page: the user picks a photo and opens the editor.
+class HomePage extends StatefulWidget {
+  /// Creates a new [HomePage] widget.
+  const HomePage({super.key});
 
   @override
-  State<MyHomePage> createState() => _MyHomePageState();
+  State<HomePage> createState() => _HomePageState();
 }
 
-class _MyHomePageState extends State<MyHomePage> {
-  final _navigatorKey = GlobalKey<NavigatorState>();
-  late final ScrollController _scrollCtrl;
+class _HomePageState extends State<HomePage> {
+  final ImagePicker _picker = ImagePicker();
+  bool _busy = false;
 
-  final String _initialRoute = kImageEditorExamples.first.path;
-  int _railIndex = 0;
-
-  @override
-  void initState() {
-    super.initState();
-    _scrollCtrl = ScrollController();
+  void _showMessage(String text) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
   }
 
-  @override
-  void dispose() {
-    _scrollCtrl.dispose();
-    super.dispose();
-  }
+  Future<void> _pick(ImageSource source) async {
+    if (_busy) return;
+    setState(() => _busy = true);
 
-  void _openCodeInGithub() async {
-    String path = 'https://github.com/hm21/pro_image_editor/tree/stable/'
-        'example/lib/features';
-    Uri url = Uri.parse(path);
-    if (!await launchUrl(url)) {
-      throw Exception('Could not launch $url');
+    try {
+      final XFile? image = await _picker.pickImage(source: source);
+      if (image == null) return;
+
+      final File file = File(image.path);
+      if (!mounted) return;
+      await precacheImage(FileImage(file), context);
+      if (!mounted) return;
+
+      await Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => _buildEditor(file)),
+      );
+    } catch (e) {
+      _showMessage('تعذر فتح الصورة');
+    } finally {
+      if (mounted) setState(() => _busy = false);
     }
+  }
+
+  Future<void> _save(Uint8List bytes) async {
+    try {
+      final bool hasAccess = await Gal.hasAccess();
+      if (!hasAccess) {
+        await Gal.requestAccess();
+      }
+      await Gal.putImageBytes(
+        bytes,
+        name: 'image_editor_${DateTime.now().millisecondsSinceEpoch}',
+      );
+      _showMessage('تم حفظ الصورة في المعرض');
+    } catch (e) {
+      _showMessage('تعذر حفظ الصورة');
+    }
+  }
+
+  Widget _buildEditor(File file) {
+    final GlobalKey<ProImageEditorState> editorKey =
+        GlobalKey<ProImageEditorState>();
+
+    return ProImageEditor.file(
+      file,
+      key: editorKey,
+      configs: const ProImageEditorConfigs(i18n: kArabicI18n),
+      callbacks: ProImageEditorCallbacks(
+        onImageEditingComplete: (Uint8List bytes) async {
+          await _save(bytes);
+        },
+        onCloseEditor: (EditorMode editorMode) {
+          editorKey.currentState?.isPopScopeDisabled = true;
+          if (mounted && Navigator.canPop(context)) {
+            Navigator.pop(context);
+          }
+        },
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    return AnnotatedRegion<SystemUiOverlayStyle>(
-      value: SystemUiOverlayStyle.light,
-      child: ExtendedPopScope(
-        child: Scaffold(
-          body: Builder(builder: (_) {
-            if (MediaQuery.sizeOf(context).width >=
-                kImageEditorExampleIsDesktopBreakPoint) {
-              /// Build navigation-rail on large screens
-              return _buildTabletExamples();
-            } else {
-              return _buildMobileExamples();
-            }
-          }),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildTabletExamples() {
-    return Row(
-      children: [
-        _buildRailBar(),
-        const VerticalDivider(width: 1),
-        Expanded(
-          // Important that hero animations work correctly
-          child: HeroControllerScope(
-            controller: MaterialApp.createMaterialHeroController(),
-            child: Navigator(
-              key: _navigatorKey,
-              initialRoute: _initialRoute,
-              onGenerateRoute: (settings) {
-                int index = kImageEditorExamples
-                    .indexWhere((example) => example.path == settings.name);
-
-                if (index < 0) {
-                  return MaterialPageRoute(
-                    builder: (_) => const NotFoundExample(),
-                  );
-                }
-
-                return PageRouteBuilder(
-                  pageBuilder: (_, __, ___) => kImageEditorExamples[index].page,
-                  transitionsBuilder:
-                      (_, animation, secondaryAnimation, child) {
-                    const begin =
-                        Offset(0.0, 0.1); // Start offscreen to the right
-                    const end = Offset.zero; // End at the center
-                    const curve = Curves.easeInOut;
-
-                    var tween = Tween(begin: begin, end: end)
-                        .chain(CurveTween(curve: curve));
-                    var offsetAnimation = animation.drive(tween);
-                    return SlideTransition(
-                      position: offsetAnimation,
-                      transformHitTests: false,
-                      child: FadeTransition(
-                        opacity: animation,
-                        child: child,
-                      ),
-                    );
-                  },
-                );
-              },
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildRailBar() {
-    return LayoutBuilder(builder: (_, constraints) {
-      return SingleChildScrollView(
-        child: ConstrainedBox(
-          constraints: BoxConstraints(minHeight: constraints.maxHeight),
-          child: IntrinsicHeight(
-            child: NavigationRail(
-              leading: Column(
-                spacing: 7,
+    return Directionality(
+      textDirection: TextDirection.rtl,
+      child: Scaffold(
+        body: SafeArea(
+          child: Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  TextButton(
-                    onPressed: _openCodeInGithub,
-                    child: const Text('View code in Github'),
+                  const Icon(Icons.image_outlined, size: 88),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'Image Editor',
+                    style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
                   ),
-                  Container(
-                    height: 0.4,
-                    width: 250,
-                    color: Colors.white54,
+                  const SizedBox(height: 8),
+                  const Text(
+                    'اختر صورة وابدأ التعديل',
+                    style: TextStyle(fontSize: 16),
                   ),
+                  const SizedBox(height: 32),
+                  if (_busy)
+                    const CircularProgressIndicator()
+                  else ...[
+                    SizedBox(
+                      width: double.infinity,
+                      child: FilledButton.icon(
+                        onPressed: () => _pick(ImageSource.gallery),
+                        icon: const Icon(Icons.image_outlined),
+                        label: const Text('اختيار صورة من المعرض'),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        onPressed: () => _pick(ImageSource.camera),
+                        icon: const Icon(Icons.photo_camera_outlined),
+                        label: const Text('التقاط صورة بالكاميرا'),
+                      ),
+                    ),
+                  ],
                 ],
               ),
-              onDestinationSelected: (index) {
-                if (_railIndex == index) return;
-
-                _navigatorKey.currentState!.pushNamedAndRemoveUntil(
-                  kImageEditorExamples[index].path,
-                  ModalRoute.withName(_initialRoute),
-                );
-                _railIndex = index;
-                setState(() {});
-              },
-              extended: true,
-              destinations: kImageEditorExamples.map((example) {
-                var color = const Color(0xFFF5F5F5).withAlpha(
-                  example.disabled ? 150 : 255,
-                );
-                return NavigationRailDestination(
-                  icon: Icon(
-                    example.icon,
-                    color: color,
-                  ),
-                  label: Text(
-                    example.name +
-                        (example.disabled ? '\nNot supported on the web' : ''),
-                    style: TextStyle(
-                      color: color,
-                    ),
-                  ),
-                  disabled: example.disabled,
-                );
-              }).toList(),
-              selectedIndex: _railIndex,
             ),
           ),
         ),
-      );
-    });
-  }
-
-  Widget _buildMobileExamples() {
-    return SafeArea(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Text(
-                  'Examples',
-                  style: TextStyle(
-                    fontSize: 28,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                RichText(
-                  text: TextSpan(
-                    style: const TextStyle(color: Colors.white),
-                    children: [
-                      const TextSpan(text: 'Check out the example code '),
-                      TextSpan(
-                        recognizer: TapGestureRecognizer()
-                          ..onTap = _openCodeInGithub,
-                        text: 'here',
-                        style: const TextStyle(color: Colors.blue),
-                      ),
-                      const TextSpan(text: '.'),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const Divider(height: 10, thickness: 0),
-          Flexible(
-            child: Scrollbar(
-              controller: _scrollCtrl,
-              thumbVisibility: true,
-              trackVisibility: true,
-              child: SingleChildScrollView(
-                controller: _scrollCtrl,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: kImageEditorExamples
-                      .map(
-                        (example) => Opacity(
-                          opacity: example.disabled ? 0.6 : 1,
-                          child: ListTile(
-                            onTap: example.disabled
-                                ? null
-                                : () {
-                                    Navigator.of(context).pushNamed(
-                                      example.path,
-                                    );
-                                  },
-                            leading: Icon(example.icon),
-                            title: Text(example.name),
-                            subtitle: example.disabled
-                                ? Text(example.disabledMessage)
-                                : null,
-                            trailing: const Icon(Icons.chevron_right_rounded),
-                          ),
-                        ),
-                      )
-                      .toList(),
-                ),
-              ),
-            ),
-          ),
-        ],
       ),
     );
   }
 }
-
-/// It's handy to then extract the Supabase client in a variable for later uses
-final supabase = Supabase.instance.client;
