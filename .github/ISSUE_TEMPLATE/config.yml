@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Question
+    url: https://github.com/hm21/pro_image_editor/discussions/new?category=q-a
+    about: The Issues tab is for reporting bugs or suggesting features. For general questions, support, or guidance, the Discussions tab is the right place to go.

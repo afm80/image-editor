@@ -1,0 +1,10 @@
+- Video-Editor
+    - Generate Native Output File
+        - Web
+        - Android
+        - iOS
+        - macOS
+        - Linux
+        - Windows
+    - Fix Web Video Player (May require a new native solution)
+    - Remove deprecated warnings on the video constructors
