@@ -1,82 +1,22 @@
-name: pro_image_editor
-description: "A Flutter image editor: Seamlessly enhance your images with user-friendly editing features."
-version: 14.25.1
-homepage: https://github.com/hm21/pro_image_editor/
-repository: https://github.com/hm21/pro_image_editor/
-documentation: https://github.com/hm21/pro_image_editor/
-funding:
-  - https://github.com/sponsors/hm21
-
-topics:
-  - image-editor
-  - image
-  - photo
-  - picture
-  - editor
-
-screenshots:
-  - description: "Showcase from the image editor with the frosted-glass design"
-    path: assets/showcase-frosted-glass.jpg
-  - description: "Showcase from the image editor with the WhatsApp design"
-    path: assets/showcase-whatsapp.jpg
-  - description: "Showcase from the image editor with simple design"
-    path: assets/showcase.jpg
-
-platforms:
-  android:
-  ios:
-  linux:
-  macos:
-  web:
-  windows:
+name: video_editor
+description: محرر فيديو مجاني للأندرويد.
+publish_to: 'none'
+version: 0.1.0+1
 
 environment:
-  sdk: '>=3.12.0 <4.0.0'
-  flutter: ">=3.44.0"
+  sdk: '>=3.3.0'
 
 dependencies:
   flutter:
     sdk: flutter
-
-  cupertino_ui: ^1.0.2
-  http: ^1.6.0
-  material_ui: ^1.1.1
-  plugin_platform_interface: ^2.1.8
-  shared_preferences: ^2.5.4
-  vector_math: ^2.2.0
-  web: ^1.1.1
-
-dev_dependencies:
-  flutter_test:
+  flutter_localizations:
     sdk: flutter
-
-  build_runner: ^2.11.1
-  flutter_lints: ^6.0.0
-  import_sorter: ^4.6.0
-  mockito: ^5.6.3
-  network_image_mock: ^2.1.1
+  intl: any
+  video_player: ^2.9.2
+  image_picker: ^1.1.2
+  path_provider: ^2.1.4
+  gal: ^2.3.0
+  ffmpeg_kit_flutter_new_min_gpl: ^2.6.3
 
 flutter:
-  plugin:
-    platforms:
-      android:
-        package: ch.waio.pro_image_editor
-        pluginClass: ProImageEditorPlugin
-      ios:
-        pluginClass: ProImageEditorPlugin
-        sharedDarwinSource: true
-      macos:
-        pluginClass: ProImageEditorPlugin
-        sharedDarwinSource: true
-  assets:
-    - path: lib/web/web_worker.dart.js
-      platforms: [web]
-    - path: lib/web/web_worker.dart.js.map
-      platforms: [web]
-  shaders:
-    - lib/shared/shaders/pixelate.frag
-    - lib/shared/shaders/pixelate_areas.frag
-  fonts:
-   - family: ProImageEditorIcons
-     fonts:
-      - asset: assets/fonts/ProImageEditorIcons.ttf
+  uses-material-design: true
